@@ -1,0 +1,28 @@
+## Build outputs & compiler artifacts (Bắt buộc)
+**/bin/
+**/obj/
+**/out/
+
+## Visual Studio & VS Code cache/settings
+.vs/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.user
+*.userosscache
+*.sln.docstates
+
+## Cấu hình môi trường chứa Secret/Connection string cục bộ
+appsettings.Development.json
+appsettings.Local.json
+*.local.json
+
+## Logs & Crash dumps
+*.log
+logs/
+
+## Test Results & Code Coverage
+TestResults/
+coverage/
+*.cobertura.xml
