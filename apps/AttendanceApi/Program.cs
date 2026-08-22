@@ -1,12 +1,18 @@
+using AttendanceApi.Domain.Entities;
 using AttendanceApi.Infrastructure.Data;
+using AttendanceApi.Services;
 using Microsoft.EntityFrameworkCore;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AttendanceDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<AttendanceDbContext>(
+    options => 
+        options.UseNpgsql(connectionString)
+    );
+
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
