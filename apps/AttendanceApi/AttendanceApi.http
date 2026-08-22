@@ -1,6 +1,43 @@
 @AttendanceApi_HostAddress = http://localhost:5032
 
-GET {{AttendanceApi_HostAddress}}/weatherforecast/
+### 1. Lấy danh sách tất cả phòng ban
+GET {{AttendanceApi_HostAddress}}/api/v1/departments
 Accept: application/json
 
 ###
+
+### 2. Lấy danh sách lọc theo từ khóa search
+GET {{AttendanceApi_HostAddress}}/api/v1/departments?keyword=HR
+Accept: application/json
+
+###
+
+### 3. Tạo phòng ban mới
+POST {{AttendanceApi_HostAddress}}/api/v1/departments
+Content-Type: application/json
+
+{
+  "code": "DEP_HR",
+  "name": "Phòng Nhân sự"
+}
+
+###
+
+### 4. Lấy thông tin chi tiết phòng ban theo ID
+GET {{AttendanceApi_HostAddress}}/api/v1/departments/1
+Accept: application/json
+
+###
+
+### 5. Cập nhật thông tin phòng ban
+PUT {{AttendanceApi_HostAddress}}/api/v1/departments/1
+Content-Type: application/json
+
+{
+  "name": "Phòng Quản trị Nhân sự & Tuyển dụng"
+}
+
+###
+
+### 6. Xóa phòng ban theo ID
+DELETE {{AttendanceApi_HostAddress}}/api/v1/departments/1
