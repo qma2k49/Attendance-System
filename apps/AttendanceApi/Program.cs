@@ -14,6 +14,8 @@ builder.Services.AddDbContext<AttendanceDbContext>(
 
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+builder.Services.AddScoped<IAttendanceDeviceService, AttendanceDeviceService>();
+builder.Services.AddScoped<IDeviceEmployeeMappingService, DeviceEmployeeMappingService>();
 
 builder.Services.AddControllers();
 
