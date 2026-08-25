@@ -2,6 +2,7 @@ using AttendanceApi.Domain.Entities;
 using AttendanceApi.Infrastructure.Data;
 using AttendanceApi.Services;
 using Microsoft.EntityFrameworkCore;
+using AttendanceApi.Services.BackgroundServices;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,6 +18,9 @@ builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 builder.Services.AddScoped<IAttendanceDeviceService, AttendanceDeviceService>();
 builder.Services.AddScoped<IDeviceEmployeeMappingService, DeviceEmployeeMappingService>();
 builder.Services.AddScoped<IIngestionService, IngestionService>();
+builder.Services.AddScoped<IDeviceSyncService, DeviceSyncService>();
+builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
+
 
 builder.Services.AddControllers();
 
