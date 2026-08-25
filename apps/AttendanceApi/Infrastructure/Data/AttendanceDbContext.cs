@@ -16,6 +16,9 @@ public class AttendanceDbContext : DbContext
     public DbSet<AttendanceDevice> AttendanceDevices => Set<AttendanceDevice>();
     public DbSet<DeviceEmployeeMapping> DeviceEmployeeMappings => Set<DeviceEmployeeMapping>();
 
+    public DbSet<RawAttendanceLog> RawAttendanceLogs => Set<RawAttendanceLog>();
+    public DbSet<DeviceSyncLog> DeviceSyncLogs => Set<DeviceSyncLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);

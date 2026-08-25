@@ -20,4 +20,6 @@ public class AttendanceDevice
 
     // 1 Device -> N DeviceEmployeeMappings
     public ICollection<DeviceEmployeeMapping> DeviceEmployeeMappings { get; set; } = new List<DeviceEmployeeMapping>();
+    public virtual ICollection<RawAttendanceLog> RawAttendanceLogs { get; set; } = new List<RawAttendanceLog>();
+    public virtual ICollection<DeviceSyncLog> DeviceSyncLogs { get; set; } = new List<DeviceSyncLog>();
 }
