@@ -1,20 +1,24 @@
 using AttendanceApi.Domain.Entities;
 using AttendanceApi.Domain.Enums;
 using AttendanceApi.DTOs.AttendanceLogs;
+using AttendanceApi.Hubs;
 using AttendanceApi.Infrastructure.Data;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-
 
 namespace AttendanceApi.Services;
 
 public class IngestionService : IIngestionService
 {
     private readonly AttendanceDbContext _context;
+    private readonly IHubContext<AttendanceHub>? _hubContext;
 
-    public IngestionService(AttendanceDbContext context)
+    public IngestionService(AttendanceDbContext context, IHubContext<AttendanceHub>? hubContext = null)
     {
         _context = context;
+        _hubContext = hubContext;
     }
+
 
     public async Task<IngestResponseDto> IngestLogsAsync(IEnumerable<IngestAttendanceLogDto> logDtos)
     {
@@ -120,6 +124,25 @@ public class IngestionService : IIngestionService
         }
 
         await _context.SaveChangesAsync();
+
+        if (_hubContext != null && newLogsToInsert.Count > 0)
+        {
+            foreach (var log in newLogsToInsert)
+            {
+                var device = devices.Values.First(d => d.Id == log.DeviceId);
+                await _hubContext.Clients.All.SendAsync("ReceiveNewAttendanceLog", new
+                {
+                    logId = log.Id,
+                    deviceId = log.DeviceId,
+                    deviceCode = device.Code,
+                    deviceName = device.Name,
+                    deviceUserId = log.DeviceUserId,
+                    checkTime = log.CheckTime,
+                    verifyMode = log.VerifyMode.ToString().ToUpper(),
+                    createdAt = log.CreatedAt
+                });
+            }
+        }
 
         return new IngestResponseDto
         {
