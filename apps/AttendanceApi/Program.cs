@@ -3,6 +3,7 @@ using AttendanceApi.Infrastructure.Data;
 using AttendanceApi.Services;
 using Microsoft.EntityFrameworkCore;
 using AttendanceApi.Services.BackgroundServices;
+using AttendanceApi.Hubs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,12 +23,14 @@ builder.Services.AddScoped<IDeviceSyncService, DeviceSyncService>();
 builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
 builder.Services.AddScoped<IRawAttendanceLogService, RawAttendanceLogService>();
 
-
+builder.Services.AddSignalR();
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
+app.MapHub<AttendanceHub>("/hubs/attendance");
 app.UseHttpsRedirection();
+
 
 
 app.UseAuthorization();
