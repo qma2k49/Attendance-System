@@ -1,8 +1,8 @@
 using System.Text.Json;
 using AttendanceApi.DTOs.AttendanceLogs;
+using AttendanceApi.DTOs.Common;
 using AttendanceApi.Services;
 using Microsoft.AspNetCore.Mvc;
-
 
 namespace AttendanceApi.Controllers;
 
@@ -11,10 +11,36 @@ namespace AttendanceApi.Controllers;
 public class AttendanceLogsController : ControllerBase
 {
     private readonly IIngestionService _ingestionService;
+    private readonly IRawAttendanceLogService _rawAttendanceLogService;
 
-    public AttendanceLogsController(IIngestionService ingestionService)
+    public AttendanceLogsController(
+        IIngestionService ingestionService,
+        IRawAttendanceLogService rawAttendanceLogService)
     {
         _ingestionService = ingestionService;
+        _rawAttendanceLogService = rawAttendanceLogService;
+    }
+
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedResultDto<RawAttendanceLogResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPagedLogs([FromQuery] RawAttendanceLogFilterDto filter)
+    {
+        var result = await _rawAttendanceLogService.GetPagedAsync(filter);
+        return Ok(result);
+    }
+
+    [HttpGet("{id:long}")]
+    [ProducesResponseType(typeof(RawAttendanceLogResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(long id)
+    {
+        var result = await _rawAttendanceLogService.GetByIdAsync(id);
+        if (result == null)
+        {
+            return NotFound(new { message = $"Không tìm thấy nhật ký chấm công với ID = {id}" });
+        }
+
+        return Ok(result);
     }
 
     [HttpPost("ingest")]
@@ -27,7 +53,6 @@ public class AttendanceLogsController : ControllerBase
             var logs = new List<IngestAttendanceLogDto>();
             var jsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-            // Hỗ trợ linh hoạt cả log đơn lẻ { ... } hoặc danh sách [ { ... }, { ... } ]
             if (payload.ValueKind == JsonValueKind.Array)
             {
                 var deserializedList = JsonSerializer.Deserialize<List<IngestAttendanceLogDto>>(payload.GetRawText(), jsonOptions);
@@ -54,7 +79,6 @@ public class AttendanceLogsController : ControllerBase
                 return BadRequest(new { message = "Danh sách dữ liệu quẹt thẻ rỗng." });
             }
 
-            // Validate sơ bộ các trường bắt buộc
             foreach (var log in logs)
             {
                 if (string.IsNullOrWhiteSpace(log.DeviceCode) || string.IsNullOrWhiteSpace(log.DeviceUserId))
