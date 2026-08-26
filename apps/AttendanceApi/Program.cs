@@ -20,6 +20,7 @@ builder.Services.AddScoped<IDeviceEmployeeMappingService, DeviceEmployeeMappingS
 builder.Services.AddScoped<IIngestionService, IngestionService>();
 builder.Services.AddScoped<IDeviceSyncService, DeviceSyncService>();
 builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
+builder.Services.AddScoped<IRawAttendanceLogService, RawAttendanceLogService>();
 
 
 builder.Services.AddControllers();
