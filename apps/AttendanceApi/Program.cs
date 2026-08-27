@@ -22,6 +22,7 @@ builder.Services.AddScoped<IIngestionService, IngestionService>();
 builder.Services.AddScoped<IDeviceSyncService, DeviceSyncService>();
 builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
 builder.Services.AddScoped<IRawAttendanceLogService, RawAttendanceLogService>();
+builder.Services.AddScoped<IAttendanceProcessingEngine, AttendanceProcessingEngine>();
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
