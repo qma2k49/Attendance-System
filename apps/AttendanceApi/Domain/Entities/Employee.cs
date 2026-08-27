@@ -20,5 +20,11 @@ public class Employee
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
     // 1 Employee -> N DeviceEmployeeMappings
-    public ICollection<DeviceEmployeeMapping> DeviceEmployeeMappings { get; set; } = new List<DeviceEmployeeMapping>();
-}
+    public virtual ICollection<DeviceEmployeeMapping> DeviceEmployeeMappings { get; set; } = new List<DeviceEmployeeMapping>();
+
+    // 1 Employee -> N WorkSchedules
+    public virtual ICollection<WorkSchedule> WorkSchedules { get; set; } = new List<WorkSchedule>();
+
+    // 1 Employee -> N DailyAttendanceRecords
+    public virtual ICollection<DailyAttendanceRecord> DailyAttendanceRecords { get; set; } = new List<DailyAttendanceRecord>();
+}

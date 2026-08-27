@@ -19,6 +19,11 @@ public class AttendanceDbContext : DbContext
     public DbSet<RawAttendanceLog> RawAttendanceLogs => Set<RawAttendanceLog>();
     public DbSet<DeviceSyncLog> DeviceSyncLogs => Set<DeviceSyncLog>();
 
+    public DbSet<WorkShift> WorkShifts => Set<WorkShift>();
+    public DbSet<WorkSchedule> WorkSchedules => Set<WorkSchedule>();
+    public DbSet<DailyAttendanceRecord> DailyAttendanceRecords => Set<DailyAttendanceRecord>();
+
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
