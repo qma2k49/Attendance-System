@@ -26,3 +26,6 @@ logs/
 TestResults/
 coverage/
 *.cobertura.xml
+
+docs/
+.agent/
