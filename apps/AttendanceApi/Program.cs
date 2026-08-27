@@ -23,9 +23,13 @@ builder.Services.AddScoped<IDeviceSyncService, DeviceSyncService>();
 builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
 builder.Services.AddScoped<IRawAttendanceLogService, RawAttendanceLogService>();
 builder.Services.AddScoped<IAttendanceProcessingEngine, AttendanceProcessingEngine>();
+builder.Services.AddScoped<IDailyAttendanceService, DailyAttendanceService>();
+
 
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
+
+builder.Services.AddHostedService<DailyAttendanceProcessingWorker>();
 
 var app = builder.Build();
 
