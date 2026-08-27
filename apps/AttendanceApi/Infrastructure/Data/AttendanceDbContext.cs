@@ -22,7 +22,8 @@ public class AttendanceDbContext : DbContext
     public DbSet<WorkShift> WorkShifts => Set<WorkShift>();
     public DbSet<WorkSchedule> WorkSchedules => Set<WorkSchedule>();
     public DbSet<DailyAttendanceRecord> DailyAttendanceRecords => Set<DailyAttendanceRecord>();
-
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

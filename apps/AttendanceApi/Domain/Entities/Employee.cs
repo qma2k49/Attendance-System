@@ -27,4 +27,12 @@ public class Employee
 
     // 1 Employee -> N DailyAttendanceRecords
     public virtual ICollection<DailyAttendanceRecord> DailyAttendanceRecords { get; set; } = new List<DailyAttendanceRecord>();
-}
+
+    // Đơn từ do nhân viên tạo
+    public virtual ICollection<LeaveRequest> LeaveRequests { get; set; } = new List<LeaveRequest>();
+    public virtual ICollection<AttendanceAdjustment> AttendanceAdjustments { get; set; } = new List<AttendanceAdjustment>();
+
+    // Đơn từ do nhân viên này phê duyệt (Approver)
+    public virtual ICollection<LeaveRequest> ApprovedLeaveRequests { get; set; } = new List<LeaveRequest>();
+    public virtual ICollection<AttendanceAdjustment> ApprovedAttendanceAdjustments { get; set; } = new List<AttendanceAdjustment>();
+}
