@@ -83,7 +83,8 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
 
         var logsToUpdate = new List<RawAttendanceLog>();
 
-        using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        var isRelational = _context.Database.IsRelational();
+        using var transaction = isRelational ? await _context.Database.BeginTransactionAsync(cancellationToken) : null;
         try
         {
             foreach (var schedule in schedules)
@@ -300,17 +301,24 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
             }
 
             await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
 
             result.Message = $"Đã xử lý nâng cao thành công {result.SuccessCount}/{result.TotalEmployeesProcessed} nhân viên.";
             return result;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (transaction != null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+            }
             _logger.LogError(ex, "Lỗi xảy ra khi xử lý công nâng cao cho ngày {WorkDate}", workDate);
             throw;
         }
+
     }
 
     /// <summary>
