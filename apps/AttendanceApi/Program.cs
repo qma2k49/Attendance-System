@@ -28,6 +28,7 @@ builder.Services.AddScoped<IAttendanceAdjustmentService, AttendanceAdjustmentSer
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<ITimesheetAggregationService, TimesheetAggregationService>();
 builder.Services.AddScoped<IMonthlyTimesheetService, MonthlyTimesheetService>();
+builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 
 
 builder.Services.AddSignalR();
