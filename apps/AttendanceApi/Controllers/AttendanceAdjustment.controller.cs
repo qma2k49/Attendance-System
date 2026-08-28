@@ -1,3 +1,4 @@
+using AttendanceApi.DTOs.Approval;
 using AttendanceApi.DTOs.AttendanceAdjustment;
 using AttendanceApi.DTOs.Common;
 using AttendanceApi.Services;
@@ -10,10 +11,14 @@ namespace AttendanceApi.Controllers;
 public class AttendanceAdjustmentsController : ControllerBase
 {
     private readonly IAttendanceAdjustmentService _adjustmentService;
+    private readonly IApprovalService _approvalService;
 
-    public AttendanceAdjustmentsController(IAttendanceAdjustmentService adjustmentService)
+    public AttendanceAdjustmentsController(
+        IAttendanceAdjustmentService adjustmentService,
+        IApprovalService approvalService)
     {
         _adjustmentService = adjustmentService;
+        _approvalService = approvalService;
     }
 
     [HttpPost]
@@ -92,6 +97,31 @@ public class AttendanceAdjustmentsController : ControllerBase
         {
             await _adjustmentService.CancelAsync(id);
             return Ok(new { message = $"Đã hủy thành công đơn giải trình ID = {id}" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:long}/approve")]
+    [ProducesResponseType(typeof(AttendanceAdjustmentResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApproveOrReject(long id, [FromBody] ApprovalActionDto dto)
+    {
+        try
+        {
+            var result = await _approvalService.ApproveOrRejectAdjustmentAsync(id, dto);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

@@ -1,3 +1,4 @@
+using AttendanceApi.DTOs.Approval;
 using AttendanceApi.DTOs.Common;
 using AttendanceApi.DTOs.LeaveRequest;
 using AttendanceApi.Services;
@@ -10,10 +11,14 @@ namespace AttendanceApi.Controllers;
 public class LeaveRequestsController : ControllerBase
 {
     private readonly ILeaveRequestService _leaveRequestService;
+    private readonly IApprovalService _approvalService;
 
-    public LeaveRequestsController(ILeaveRequestService leaveRequestService)
+    public LeaveRequestsController(
+        ILeaveRequestService leaveRequestService,
+        IApprovalService approvalService)
     {
         _leaveRequestService = leaveRequestService;
+        _approvalService = approvalService;
     }
 
     [HttpPost]
@@ -92,6 +97,31 @@ public class LeaveRequestsController : ControllerBase
         {
             await _leaveRequestService.CancelAsync(id);
             return Ok(new { message = $"Đã hủy thành công đơn xin nghỉ phép ID = {id}" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{id:long}/approve")]
+    [ProducesResponseType(typeof(LeaveRequestResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ApproveOrReject(long id, [FromBody] ApprovalActionDto dto)
+    {
+        try
+        {
+            var result = await _approvalService.ApproveOrRejectLeaveRequestAsync(id, dto);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
