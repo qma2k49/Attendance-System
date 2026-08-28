@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using AttendanceApi.Services.BackgroundServices;
 using AttendanceApi.Hubs;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -24,6 +23,7 @@ builder.Services.AddHostedService<AttendanceSyncBackgroundWorker>();
 builder.Services.AddScoped<IRawAttendanceLogService, RawAttendanceLogService>();
 builder.Services.AddScoped<IAttendanceProcessingEngine, AttendanceProcessingEngine>();
 builder.Services.AddScoped<IDailyAttendanceService, DailyAttendanceService>();
+builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 
 
 builder.Services.AddSignalR();
