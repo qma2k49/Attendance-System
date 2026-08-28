@@ -27,6 +27,7 @@ builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 builder.Services.AddScoped<IAttendanceAdjustmentService, AttendanceAdjustmentService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<ITimesheetAggregationService, TimesheetAggregationService>();
+builder.Services.AddScoped<IMonthlyTimesheetService, MonthlyTimesheetService>();
 
 
 builder.Services.AddSignalR();
