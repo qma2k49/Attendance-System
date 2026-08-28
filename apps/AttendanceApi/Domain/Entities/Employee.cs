@@ -35,4 +35,10 @@ public class Employee
     // Đơn từ do nhân viên này phê duyệt (Approver)
     public virtual ICollection<LeaveRequest> ApprovedLeaveRequests { get; set; } = new List<LeaveRequest>();
     public virtual ICollection<AttendanceAdjustment> ApprovedAttendanceAdjustments { get; set; } = new List<AttendanceAdjustment>();
+
+    // Bảng công tháng của nhân viên
+    public virtual ICollection<MonthlyTimesheetSummary> MonthlyTimesheetSummaries { get; set; } = new List<MonthlyTimesheetSummary>();
+
+    // Bảng công tháng do nhân viên này chốt / khóa
+    public virtual ICollection<MonthlyTimesheetSummary> FinalizedMonthlyTimesheets { get; set; } = new List<MonthlyTimesheetSummary>();
 }
