@@ -25,6 +25,7 @@ builder.Services.AddScoped<IAttendanceProcessingEngine, AttendanceProcessingEngi
 builder.Services.AddScoped<IDailyAttendanceService, DailyAttendanceService>();
 builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 builder.Services.AddScoped<IAttendanceAdjustmentService, AttendanceAdjustmentService>();
+builder.Services.AddScoped<IApprovalService, ApprovalService>();
 
 
 builder.Services.AddSignalR();
