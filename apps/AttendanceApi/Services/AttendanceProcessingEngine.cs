@@ -63,7 +63,21 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
 
         var deviceUserIds = deviceMappings.Select(m => m.DeviceUserId).Distinct().ToList();
 
-        // 3. Xác định khung thời gian quét log tổng thể (Bao phủ cả ca thường lẫn ca qua đêm)
+        // 3. Tra cứu Đơn nghỉ phép & Đơn bổ sung công ĐÃ DUYỆT (APPROVED)
+        var approvedLeaveRequests = await _context.LeaveRequests
+            .Where(l => employeeIds.Contains(l.EmployeeId) &&
+                        l.Status == RequestStatus.Approved &&
+                        l.FromDate <= workDate &&
+                        l.ToDate >= workDate)
+            .ToListAsync(cancellationToken);
+
+        var approvedAdjustments = await _context.AttendanceAdjustments
+            .Where(a => employeeIds.Contains(a.EmployeeId) &&
+                        a.Status == RequestStatus.Approved &&
+                        a.WorkDate == workDate)
+            .ToListAsync(cancellationToken);
+
+        // 4. Xác định khung thời gian quét log tổng thể (Bao phủ cả ca thường lẫn ca qua đêm)
         var minGlobalScanTime = workDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-SearchWindowHours);
         var maxGlobalScanTime = workDate.AddDays(1).ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc).AddHours(SearchWindowHours);
 
@@ -76,7 +90,7 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
 
         result.TotalRawLogsProcessed = allRawLogs.Count;
 
-        // 4. Lấy các bản ghi DailyAttendanceRecord đã tồn tại để thực hiện Upsert
+        // 5. Lấy các bản ghi DailyAttendanceRecord đã tồn tại để thực hiện Upsert
         var existingRecords = await _context.DailyAttendanceRecords
             .Where(r => r.WorkDate == workDate && employeeIds.Contains(r.EmployeeId))
             .ToDictionaryAsync(r => r.EmployeeId, cancellationToken);
@@ -132,120 +146,159 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
                 int lateMinutes = 0;
                 int earlyMinutes = 0;
                 decimal workHours = 0m;
-                DailyAttendanceStatus status;
+                DailyAttendanceStatus status = DailyAttendanceStatus.Absent;
 
-                if (deduplicatedLogs.Count == 0)
+                // TH1: Kiểm tra xem nhân viên có đơn nghỉ phép đã duyệt hay không
+                var approvedLeave = approvedLeaveRequests.FirstOrDefault(l => l.EmployeeId == employeeId);
+                if (approvedLeave != null)
                 {
-                    status = DailyAttendanceStatus.Absent;
-                }
-                else if (deduplicatedLogs.Count == 1)
-                {
-                    // Xử lý trường hợp chỉ quẹt thẻ 1 lần (Single Punch)
-                    var singlePunch = deduplicatedLogs[0].CheckTime;
-                    var distToStart = Math.Abs((singlePunch - shiftStart).TotalHours);
-                    var distToEnd = Math.Abs((singlePunch - shiftEnd).TotalHours);
-
-                    if (distToStart <= distToEnd && distToStart <= SinglePunchThresholdHours)
+                    status = DailyAttendanceStatus.OnLeave;
+                    // Phép năm, Thai sản, Hiếu hỷ được tính hưởng lương đủ giờ ca
+                    if (approvedLeave.LeaveType == LeaveType.Annual ||
+                        approvedLeave.LeaveType == LeaveType.Maternity ||
+                        approvedLeave.LeaveType == LeaveType.Compassionate)
                     {
-                        // Gần StartTime -> Check-In, thiếu Check-Out
-                        checkIn = singlePunch;
-                        checkOut = null;
-                        status = DailyAttendanceStatus.EarlyLeave;
-                    }
-                    else if (distToEnd <= SinglePunchThresholdHours)
-                    {
-                        // Gần EndTime -> Check-Out, thiếu Check-In
-                        checkIn = null;
-                        checkOut = singlePunch;
-                        status = DailyAttendanceStatus.Late;
+                        workHours = shift.WorkHours;
                     }
                     else
                     {
-                        // Mặc định gán Check-In
-                        checkIn = singlePunch;
-                        checkOut = null;
-                        status = DailyAttendanceStatus.EarlyLeave;
+                        workHours = 0m;
                     }
-
-                    // Tính trễ nếu có Check-In
-                    if (checkIn.HasValue)
-                    {
-                        var graceStart = shiftStart.AddMinutes(shift.GracePeriodMinutes);
-                        if (checkIn.Value > graceStart)
-                        {
-                            lateMinutes = (int)Math.Max(0, (checkIn.Value - shiftStart).TotalMinutes);
-                        }
-                    }
-
-                    // Tính về sớm nếu có Check-Out
-                    if (checkOut.HasValue && checkOut.Value < shiftEnd)
-                    {
-                        earlyMinutes = (int)Math.Max(0, (shiftEnd - checkOut.Value).TotalMinutes);
-                    }
+                    lateMinutes = 0;
+                    earlyMinutes = 0;
                 }
                 else
                 {
-                    // Lấy First-In và Last-Out
-                    checkIn = deduplicatedLogs.First().CheckTime;
-                    checkOut = deduplicatedLogs.Last().CheckTime;
+                    // Lấy đơn giải trình công đã duyệt (nếu có)
+                    var approvedAdjustment = approvedAdjustments.FirstOrDefault(a => a.EmployeeId == employeeId);
 
-                    // Tính phút đi muộn
-                    var graceStartTime = shiftStart.AddMinutes(shift.GracePeriodMinutes);
-                    if (checkIn.Value > graceStartTime)
+                    if (deduplicatedLogs.Count == 0)
                     {
-                        lateMinutes = (int)Math.Max(0, (checkIn.Value - shiftStart).TotalMinutes);
-                    }
-
-                    // Tính phút về sớm
-                    if (checkOut.Value < shiftEnd)
-                    {
-                        earlyMinutes = (int)Math.Max(0, (shiftEnd - checkOut.Value).TotalMinutes);
-                    }
-
-                    // Tính tổng giờ làm việc thực tế
-                    var totalWorkTime = checkOut.Value - checkIn.Value;
-                    var rawWorkHours = (decimal)totalWorkTime.TotalHours;
-
-                    // Khấu trừ giờ nghỉ giữa ca (nếu có)
-                    if (shift.BreakStartTime.HasValue && shift.BreakEndTime.HasValue)
-                    {
-                        var breakStart = workDate.ToDateTime(shift.BreakStartTime.Value, DateTimeKind.Utc);
-                        var breakEnd = workDate.ToDateTime(shift.BreakEndTime.Value, DateTimeKind.Utc);
-
-                        // Nếu giờ nghỉ nằm qua đêm
-                        if (shift.BreakEndTime.Value < shift.BreakStartTime.Value)
+                        if (approvedAdjustment != null && (approvedAdjustment.AdjustedCheckIn.HasValue || approvedAdjustment.AdjustedCheckOut.HasValue))
                         {
-                            breakEnd = workDate.AddDays(1).ToDateTime(shift.BreakEndTime.Value, DateTimeKind.Utc);
+                            checkIn = approvedAdjustment.AdjustedCheckIn;
+                            checkOut = approvedAdjustment.AdjustedCheckOut;
                         }
-
-                        var breakDuration = (decimal)(breakEnd - breakStart).TotalHours;
-                        if (rawWorkHours > breakDuration)
+                        else
                         {
-                            rawWorkHours -= breakDuration;
+                            status = DailyAttendanceStatus.Absent;
                         }
                     }
-
-                    workHours = Math.Max(0, Math.Round(rawWorkHours, 2));
-
-                    // Xác định trạng thái công
-                    var isLate = lateMinutes > 0;
-                    var isEarly = earlyMinutes > 0;
-
-                    if (isLate && isEarly)
+                    else if (deduplicatedLogs.Count == 1)
                     {
-                        status = DailyAttendanceStatus.LateAndEarlyLeave;
-                    }
-                    else if (isLate)
-                    {
-                        status = DailyAttendanceStatus.Late;
-                    }
-                    else if (isEarly)
-                    {
-                        status = DailyAttendanceStatus.EarlyLeave;
+                        var singlePunch = deduplicatedLogs[0].CheckTime;
+                        var distToStart = Math.Abs((singlePunch - shiftStart).TotalHours);
+                        var distToEnd = Math.Abs((singlePunch - shiftEnd).TotalHours);
+
+                        if (distToStart <= distToEnd && distToStart <= SinglePunchThresholdHours)
+                        {
+                            checkIn = singlePunch;
+                        }
+                        else if (distToEnd <= SinglePunchThresholdHours)
+                        {
+                            checkOut = singlePunch;
+                        }
+                        else
+                        {
+                            checkIn = singlePunch;
+                        }
+
+                        // Ghi đè bằng giờ điều chỉnh nếu có đơn giải trình
+                        if (approvedAdjustment != null)
+                        {
+                            if (approvedAdjustment.AdjustedCheckIn.HasValue) checkIn = approvedAdjustment.AdjustedCheckIn.Value;
+                            if (approvedAdjustment.AdjustedCheckOut.HasValue) checkOut = approvedAdjustment.AdjustedCheckOut.Value;
+                        }
                     }
                     else
                     {
-                        status = DailyAttendanceStatus.Present;
+                        checkIn = deduplicatedLogs.First().CheckTime;
+                        checkOut = deduplicatedLogs.Last().CheckTime;
+
+                        // Ghi đè bằng giờ điều chỉnh nếu có đơn giải trình
+                        if (approvedAdjustment != null)
+                        {
+                            if (approvedAdjustment.AdjustedCheckIn.HasValue) checkIn = approvedAdjustment.AdjustedCheckIn.Value;
+                            if (approvedAdjustment.AdjustedCheckOut.HasValue) checkOut = approvedAdjustment.AdjustedCheckOut.Value;
+                        }
+                    }
+
+                    // Nếu không phải nghỉ phép, thực hiện tính toán công ngày dựa trên CheckIn và CheckOut
+                    if (!checkIn.HasValue && !checkOut.HasValue)
+                    {
+                        status = DailyAttendanceStatus.Absent;
+                        workHours = 0m;
+                        lateMinutes = 0;
+                        earlyMinutes = 0;
+                    }
+                    else
+                    {
+                        // Tính phút đi muộn
+                        if (checkIn.HasValue)
+                        {
+                            var graceStart = shiftStart.AddMinutes(shift.GracePeriodMinutes);
+                            if (checkIn.Value > graceStart)
+                            {
+                                lateMinutes = (int)Math.Max(0, (checkIn.Value - shiftStart).TotalMinutes);
+                            }
+                        }
+
+                        // Tính phút về sớm
+                        if (checkOut.HasValue && checkOut.Value < shiftEnd)
+                        {
+                            earlyMinutes = (int)Math.Max(0, (shiftEnd - checkOut.Value).TotalMinutes);
+                        }
+
+                        // Tính tổng giờ làm việc thực tế
+                        if (checkIn.HasValue && checkOut.HasValue)
+                        {
+                            var totalWorkTime = checkOut.Value - checkIn.Value;
+                            var rawWorkHours = (decimal)totalWorkTime.TotalHours;
+
+                            if (shift.BreakStartTime.HasValue && shift.BreakEndTime.HasValue)
+                            {
+                                var breakStart = workDate.ToDateTime(shift.BreakStartTime.Value, DateTimeKind.Utc);
+                                var breakEnd = workDate.ToDateTime(shift.BreakEndTime.Value, DateTimeKind.Utc);
+
+                                if (shift.BreakEndTime.Value < shift.BreakStartTime.Value)
+                                {
+                                    breakEnd = workDate.AddDays(1).ToDateTime(shift.BreakEndTime.Value, DateTimeKind.Utc);
+                                }
+
+                                var breakDuration = (decimal)(breakEnd - breakStart).TotalHours;
+                                if (rawWorkHours > breakDuration)
+                                {
+                                    rawWorkHours -= breakDuration;
+                                }
+                            }
+
+                            workHours = Math.Max(0, Math.Round(rawWorkHours, 2));
+                        }
+
+                        // Xác định trạng thái công
+                        var isLate = lateMinutes > 0;
+                        var isEarly = earlyMinutes > 0 || !checkOut.HasValue;
+
+                        if (!checkIn.HasValue && checkOut.HasValue)
+                        {
+                            status = DailyAttendanceStatus.Late;
+                        }
+                        else if (isLate && isEarly)
+                        {
+                            status = DailyAttendanceStatus.LateAndEarlyLeave;
+                        }
+                        else if (isLate)
+                        {
+                            status = DailyAttendanceStatus.Late;
+                        }
+                        else if (isEarly)
+                        {
+                            status = DailyAttendanceStatus.EarlyLeave;
+                        }
+                        else
+                        {
+                            status = DailyAttendanceStatus.Present;
+                        }
                     }
                 }
 
@@ -318,12 +371,8 @@ public class AttendanceProcessingEngine : IAttendanceProcessingEngine
             _logger.LogError(ex, "Lỗi xảy ra khi xử lý công nâng cao cho ngày {WorkDate}", workDate);
             throw;
         }
-
     }
 
-    /// <summary>
-    /// Lọc bỏ các lần quẹt liên tiếp trong khoảng thời gian đệm (Buffer Window)
-    /// </summary>
     private static List<RawAttendanceLog> DeduplicateLogs(List<RawAttendanceLog> logs, TimeSpan bufferWindow)
     {
         if (logs.Count <= 1)
