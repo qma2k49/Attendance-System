@@ -24,6 +24,7 @@ public class AttendanceDbContext : DbContext
     public DbSet<DailyAttendanceRecord> DailyAttendanceRecords => Set<DailyAttendanceRecord>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
+    public DbSet<MonthlyTimesheetSummary> MonthlyTimesheetSummaries => Set<MonthlyTimesheetSummary>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
