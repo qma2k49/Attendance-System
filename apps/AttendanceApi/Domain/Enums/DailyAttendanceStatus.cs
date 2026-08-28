@@ -8,5 +8,6 @@ public enum DailyAttendanceStatus
     EarlyLeave = 3,
     LateAndEarlyLeave = 4,
     Holiday = 5,
-    Off = 6
+    Off = 6,
+    OnLeave = 7
 }
