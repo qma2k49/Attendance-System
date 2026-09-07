@@ -26,6 +26,9 @@ public class AttendanceDbContext : DbContext
     public DbSet<AttendanceAdjustment> AttendanceAdjustments => Set<AttendanceAdjustment>();
     public DbSet<MonthlyTimesheetSummary> MonthlyTimesheetSummaries => Set<MonthlyTimesheetSummary>();
 
+    public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
