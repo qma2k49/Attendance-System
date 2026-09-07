@@ -64,6 +64,7 @@ builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddMemoryCache();
 
 
 

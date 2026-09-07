@@ -4,21 +4,35 @@ using AttendanceApi.DTOs.Common;
 using AttendanceApi.DTOs.Devices;
 using AttendanceApi.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-
+using Microsoft.Extensions.Caching.Memory;
 
 namespace AttendanceApi.Services;
 
 public class AttendanceDeviceService : IAttendanceDeviceService
 {
     private readonly AttendanceDbContext _context;
+    private readonly IMemoryCache? _cache;
+    private static readonly TimeSpan AbsoluteExpiration = TimeSpan.FromMinutes(60);
+    private static readonly TimeSpan SlidingExpiration = TimeSpan.FromMinutes(10);
 
-    public AttendanceDeviceService(AttendanceDbContext context)
+    private static readonly HashSet<string> DeviceCacheKeys = new();
+    private static readonly object LockObj = new();
+
+    public AttendanceDeviceService(AttendanceDbContext context, IMemoryCache? cache = null)
     {
         _context = context;
+        _cache = cache;
     }
 
     public async Task<PagedResultDto<DeviceResponseDto>> GetPagedAsync(DeviceFilterDto filter)
     {
+        var cacheKey = $"devices:paged:{filter.PageNumber}_{filter.PageSize}_{filter.Status?.ToString() ?? "all"}_{filter.Keyword?.Trim().ToLowerInvariant() ?? "none"}";
+
+        if (_cache != null && _cache.TryGetValue(cacheKey, out PagedResultDto<DeviceResponseDto>? cachedPaged) && cachedPaged != null)
+        {
+            return cachedPaged;
+        }
+
         var query = _context.AttendanceDevices
             .AsNoTracking()
             .AsQueryable();
@@ -62,18 +76,37 @@ public class AttendanceDeviceService : IAttendanceDeviceService
             })
             .ToListAsync();
 
-        return new PagedResultDto<DeviceResponseDto>
+        var result = new PagedResultDto<DeviceResponseDto>
         {
             Items = items,
             TotalItems = totalItems,
             PageNumber = pageNumber,
             PageSize = pageSize
         };
+
+        if (_cache != null)
+        {
+            var options = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(AbsoluteExpiration)
+                .SetSlidingExpiration(SlidingExpiration);
+
+            _cache.Set(cacheKey, result, options);
+            TrackCacheKey(cacheKey);
+        }
+
+        return result;
     }
 
     public async Task<DeviceResponseDto?> GetByIdAsync(int id)
     {
-        return await _context.AttendanceDevices
+        var cacheKey = $"devices:id:{id}";
+
+        if (_cache != null && _cache.TryGetValue(cacheKey, out DeviceResponseDto? cachedDevice) && cachedDevice != null)
+        {
+            return cachedDevice;
+        }
+
+        var result = await _context.AttendanceDevices
             .AsNoTracking()
             .Where(d => d.Id == id)
             .Select(d => new DeviceResponseDto
@@ -93,6 +126,18 @@ public class AttendanceDeviceService : IAttendanceDeviceService
                 UpdatedAt = d.UpdatedAt
             })
             .FirstOrDefaultAsync();
+
+        if (result != null && _cache != null)
+        {
+            var options = new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(AbsoluteExpiration)
+                .SetSlidingExpiration(SlidingExpiration);
+
+            _cache.Set(cacheKey, result, options);
+            TrackCacheKey(cacheKey);
+        }
+
+        return result;
     }
 
     public async Task<DeviceResponseDto> CreateAsync(CreateDeviceDto dto)
@@ -100,13 +145,11 @@ public class AttendanceDeviceService : IAttendanceDeviceService
         var normalizedCode = dto.Code.Trim().ToUpper();
         var normalizedSerial = dto.SerialNumber?.Trim();
 
-        // 1. Check unique Code
         if (await _context.AttendanceDevices.AnyAsync(d => d.Code == normalizedCode))
         {
             throw new InvalidOperationException($"Mã thiết bị '{normalizedCode}' đã tồn tại trong hệ thống.");
         }
 
-        // 2. Check unique SerialNumber
         if (!string.IsNullOrWhiteSpace(normalizedSerial) && 
             await _context.AttendanceDevices.AnyAsync(d => d.SerialNumber == normalizedSerial))
         {
@@ -129,6 +172,8 @@ public class AttendanceDeviceService : IAttendanceDeviceService
 
         _context.AttendanceDevices.Add(device);
         await _context.SaveChangesAsync();
+
+        InvalidateCache();
 
         return new DeviceResponseDto
         {
@@ -177,6 +222,8 @@ public class AttendanceDeviceService : IAttendanceDeviceService
 
         await _context.SaveChangesAsync();
 
+        InvalidateCache();
+
         return new DeviceResponseDto
         {
             Id = device.Id,
@@ -205,6 +252,30 @@ public class AttendanceDeviceService : IAttendanceDeviceService
 
         _context.AttendanceDevices.Remove(device);
         await _context.SaveChangesAsync();
+
+        InvalidateCache();
         return true;
+    }
+
+    private static void TrackCacheKey(string key)
+    {
+        lock (LockObj)
+        {
+            DeviceCacheKeys.Add(key);
+        }
+    }
+
+    private void InvalidateCache()
+    {
+        if (_cache == null) return;
+
+        lock (LockObj)
+        {
+            foreach (var key in DeviceCacheKeys)
+            {
+                _cache.Remove(key);
+            }
+            DeviceCacheKeys.Clear();
+        }
     }
 }
