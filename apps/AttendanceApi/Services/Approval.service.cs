@@ -1,42 +1,52 @@
+using AttendanceApi.Domain.Entities;
 using AttendanceApi.Domain.Enums;
 using AttendanceApi.DTOs.Approval;
 using AttendanceApi.DTOs.AttendanceAdjustment;
 using AttendanceApi.DTOs.LeaveRequest;
-using AttendanceApi.Hubs;
 using AttendanceApi.Infrastructure.Data;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace AttendanceApi.Services;
 
 public class ApprovalService : IApprovalService
 {
     private readonly AttendanceDbContext _context;
-    private readonly IHubContext<AttendanceHub>? _hubContext;
+    private readonly ILogger<ApprovalService>? _logger;
 
-    public ApprovalService(AttendanceDbContext context, IHubContext<AttendanceHub>? hubContext = null)
+    public ApprovalService(AttendanceDbContext context, ILogger<ApprovalService>? logger = null)
     {
         _context = context;
-        _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task<LeaveRequestResponseDto> ApproveOrRejectLeaveRequestAsync(long id, ApprovalActionDto dto)
     {
-        var action = dto.Action.Trim().ToUpper();
-        if (action != "APPROVE" && action != "REJECT")
+        if (dto == null)
         {
-            throw new ArgumentException("Hành động không hợp lệ. Chỉ chấp nhận 'APPROVE' hoặc 'REJECT'.");
+            throw new ArgumentNullException(nameof(dto));
         }
 
-        if (action == "REJECT" && string.IsNullOrWhiteSpace(dto.RejectionReason))
+        var isApprove = string.Equals(dto.Action, "APPROVE", StringComparison.OrdinalIgnoreCase);
+        var isReject = string.Equals(dto.Action, "REJECT", StringComparison.OrdinalIgnoreCase);
+
+        if (!isApprove && !isReject)
         {
-            throw new ArgumentException("Bắt buộc phải nhập lý do từ chối (RejectionReason) khi REJECT đơn.");
+            throw new ArgumentException($"Hành động '{dto.Action}' không hợp lệ. Chỉ chấp nhận 'APPROVE' hoặc 'REJECT'.");
         }
 
-        var approver = await _context.Employees.FindAsync(dto.ApproverId);
+        if (isReject && string.IsNullOrWhiteSpace(dto.RejectionReason))
+        {
+            throw new ArgumentException("Lý do từ chối không được để trống khi từ chối đơn.");
+        }
+
+        var approver = await _context.Employees
+            .Include(e => e.Department)
+            .FirstOrDefaultAsync(e => e.Id == dto.ApproverId);
+
         if (approver == null)
         {
-            throw new KeyNotFoundException($"Không tìm thấy người duyệt (Approver) với ID = {dto.ApproverId}");
+            throw new KeyNotFoundException($"Không tìm thấy người duyệt với ID = {dto.ApproverId}");
         }
 
         var leaveRequest = await _context.LeaveRequests
@@ -51,41 +61,37 @@ public class ApprovalService : IApprovalService
 
         if (leaveRequest.Status != RequestStatus.Pending)
         {
-            throw new InvalidOperationException($"Chỉ có thể duyệt/từ chối đơn khi ở trạng thái PENDING. Trạng thái hiện tại: {leaveRequest.Status}");
+            throw new InvalidOperationException($"Chỉ có thể phê duyệt hoặc từ chối đơn khi ở trạng thái PENDING. Trạng thái hiện tại: {leaveRequest.Status}");
+        }
+
+        // Data Scoping Check: Trưởng phòng chỉ duyệt đơn của nhân viên thuộc cùng phòng ban
+        var approverUser = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.EmployeeId == approver.Id);
+
+        if (approverUser != null && approverUser.Role == UserRole.Manager)
+        {
+            if (leaveRequest.Employee == null || leaveRequest.Employee.DepartmentId != approver.DepartmentId)
+            {
+                throw new UnauthorizedAccessException("Trưởng phòng chỉ được phép phê duyệt đơn của nhân viên thuộc phòng ban mình quản lý.");
+            }
         }
 
         var now = DateTime.UtcNow;
+        leaveRequest.Status = isApprove ? RequestStatus.Approved : RequestStatus.Rejected;
         leaveRequest.ApproverId = approver.Id;
         leaveRequest.ApprovedAt = now;
+        leaveRequest.RejectionReason = isApprove ? null : dto.RejectionReason?.Trim();
         leaveRequest.UpdatedAt = now;
-
-        if (action == "APPROVE")
-        {
-            leaveRequest.Status = RequestStatus.Approved;
-            leaveRequest.RejectionReason = null;
-        }
-        else
-        {
-            leaveRequest.Status = RequestStatus.Rejected;
-            leaveRequest.RejectionReason = dto.RejectionReason?.Trim();
-        }
 
         await _context.SaveChangesAsync();
 
-        // Bắn thông báo thời gian thực qua SignalR Hub
-        if (_hubContext != null)
-        {
-            await _hubContext.Clients.All.SendAsync("ReceiveRequestStatusChanged", new
-            {
-                requestType = "LEAVE_REQUEST",
-                requestId = leaveRequest.Id,
-                employeeId = leaveRequest.EmployeeId,
-                status = leaveRequest.Status.ToString().ToUpper(),
-                approverName = approver.FullName,
-                approvedAt = leaveRequest.ApprovedAt,
-                rejectionReason = leaveRequest.RejectionReason
-            });
-        }
+        _logger?.LogInformation(
+            "Người duyệt ID {ApproverId} đã {Action} đơn xin nghỉ phép ID {Id} của nhân viên ID {EmployeeId}.",
+            approver.Id,
+            isApprove ? "CHẤP THUẬN" : "TỪ CHỐI",
+            id,
+            leaveRequest.EmployeeId);
 
         return new LeaveRequestResponseDto
         {
@@ -100,7 +106,7 @@ public class ApprovalService : IApprovalService
             TotalDays = leaveRequest.TotalDays,
             Reason = leaveRequest.Reason,
             Status = leaveRequest.Status.ToString().ToUpper(),
-            ApproverId = leaveRequest.ApproverId,
+            ApproverId = approver.Id,
             ApproverFullName = approver.FullName,
             ApprovedAt = leaveRequest.ApprovedAt,
             RejectionReason = leaveRequest.RejectionReason,
@@ -110,21 +116,31 @@ public class ApprovalService : IApprovalService
 
     public async Task<AttendanceAdjustmentResponseDto> ApproveOrRejectAdjustmentAsync(long id, ApprovalActionDto dto)
     {
-        var action = dto.Action.Trim().ToUpper();
-        if (action != "APPROVE" && action != "REJECT")
+        if (dto == null)
         {
-            throw new ArgumentException("Hành động không hợp lệ. Chỉ chấp nhận 'APPROVE' hoặc 'REJECT'.");
+            throw new ArgumentNullException(nameof(dto));
         }
 
-        if (action == "REJECT" && string.IsNullOrWhiteSpace(dto.RejectionReason))
+        var isApprove = string.Equals(dto.Action, "APPROVE", StringComparison.OrdinalIgnoreCase);
+        var isReject = string.Equals(dto.Action, "REJECT", StringComparison.OrdinalIgnoreCase);
+
+        if (!isApprove && !isReject)
         {
-            throw new ArgumentException("Bắt buộc phải nhập lý do từ chối (RejectionReason) khi REJECT đơn.");
+            throw new ArgumentException($"Hành động '{dto.Action}' không hợp lệ. Chỉ chấp nhận 'APPROVE' hoặc 'REJECT'.");
         }
 
-        var approver = await _context.Employees.FindAsync(dto.ApproverId);
+        if (isReject && string.IsNullOrWhiteSpace(dto.RejectionReason))
+        {
+            throw new ArgumentException("Lý do từ chối không được để trống khi từ chối đơn.");
+        }
+
+        var approver = await _context.Employees
+            .Include(e => e.Department)
+            .FirstOrDefaultAsync(e => e.Id == dto.ApproverId);
+
         if (approver == null)
         {
-            throw new KeyNotFoundException($"Không tìm thấy người duyệt (Approver) với ID = {dto.ApproverId}");
+            throw new KeyNotFoundException($"Không tìm thấy người duyệt với ID = {dto.ApproverId}");
         }
 
         var adjustment = await _context.AttendanceAdjustments
@@ -134,47 +150,42 @@ public class ApprovalService : IApprovalService
 
         if (adjustment == null)
         {
-            throw new KeyNotFoundException($"Không tìm thấy đơn giải trình chấm công với ID = {id}");
+            throw new KeyNotFoundException($"Không tìm thấy đơn giải trình với ID = {id}");
         }
 
         if (adjustment.Status != RequestStatus.Pending)
         {
-            throw new InvalidOperationException($"Chỉ có thể duyệt/từ chối đơn khi ở trạng thái PENDING. Trạng thái hiện tại: {adjustment.Status}");
+            throw new InvalidOperationException($"Chỉ có thể phê duyệt hoặc từ chối đơn khi ở trạng thái PENDING. Trạng thái hiện tại: {adjustment.Status}");
+        }
+
+        // Data Scoping Check: Trưởng phòng chỉ duyệt đơn của nhân viên thuộc cùng phòng ban
+        var approverUser = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.EmployeeId == approver.Id);
+
+        if (approverUser != null && approverUser.Role == UserRole.Manager)
+        {
+            if (adjustment.Employee == null || adjustment.Employee.DepartmentId != approver.DepartmentId)
+            {
+                throw new UnauthorizedAccessException("Trưởng phòng chỉ được phép phê duyệt đơn của nhân viên thuộc phòng ban mình quản lý.");
+            }
         }
 
         var now = DateTime.UtcNow;
+        adjustment.Status = isApprove ? RequestStatus.Approved : RequestStatus.Rejected;
         adjustment.ApproverId = approver.Id;
         adjustment.ApprovedAt = now;
+        adjustment.RejectionReason = isApprove ? null : dto.RejectionReason?.Trim();
         adjustment.UpdatedAt = now;
-
-        if (action == "APPROVE")
-        {
-            adjustment.Status = RequestStatus.Approved;
-            adjustment.RejectionReason = null;
-        }
-        else
-        {
-            adjustment.Status = RequestStatus.Rejected;
-            adjustment.RejectionReason = dto.RejectionReason?.Trim();
-        }
 
         await _context.SaveChangesAsync();
 
-        // Bắn thông báo thời gian thực qua SignalR Hub
-        if (_hubContext != null)
-        {
-            await _hubContext.Clients.All.SendAsync("ReceiveRequestStatusChanged", new
-            {
-                requestType = "ATTENDANCE_ADJUSTMENT",
-                requestId = adjustment.Id,
-                employeeId = adjustment.EmployeeId,
-                workDate = adjustment.WorkDate,
-                status = adjustment.Status.ToString().ToUpper(),
-                approverName = approver.FullName,
-                approvedAt = adjustment.ApprovedAt,
-                rejectionReason = adjustment.RejectionReason
-            });
-        }
+        _logger?.LogInformation(
+            "Người duyệt ID {ApproverId} đã {Action} đơn giải trình công ID {Id} của nhân viên ID {EmployeeId}.",
+            approver.Id,
+            isApprove ? "CHẤP THUẬN" : "TỪ CHỐI",
+            id,
+            adjustment.EmployeeId);
 
         return new AttendanceAdjustmentResponseDto
         {
@@ -184,14 +195,12 @@ public class ApprovalService : IApprovalService
             EmployeeFullName = adjustment.Employee?.FullName ?? string.Empty,
             DepartmentName = adjustment.Employee?.Department?.Name,
             WorkDate = adjustment.WorkDate,
-            AdjustmentType = adjustment.AdjustmentType == AdjustmentType.ForgottenCheckIn ? "FORGOTTEN_CHECKIN" :
-                             adjustment.AdjustmentType == AdjustmentType.ForgottenCheckOut ? "FORGOTTEN_CHECKOUT" :
-                             adjustment.AdjustmentType == AdjustmentType.BusinessTrip ? "BUSINESS_TRIP" : "OVERTIME_CLAIM",
+            AdjustmentType = adjustment.AdjustmentType.ToString().ToUpper(),
             AdjustedCheckIn = adjustment.AdjustedCheckIn,
             AdjustedCheckOut = adjustment.AdjustedCheckOut,
             Reason = adjustment.Reason,
             Status = adjustment.Status.ToString().ToUpper(),
-            ApproverId = adjustment.ApproverId,
+            ApproverId = approver.Id,
             ApproverFullName = approver.FullName,
             ApprovedAt = adjustment.ApprovedAt,
             RejectionReason = adjustment.RejectionReason,

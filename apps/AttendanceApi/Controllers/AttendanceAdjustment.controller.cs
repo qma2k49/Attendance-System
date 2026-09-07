@@ -1,8 +1,10 @@
+using AttendanceApi.Common.Constants;
 using AttendanceApi.DTOs.Approval;
 using AttendanceApi.DTOs.AttendanceAdjustment;
 using AttendanceApi.DTOs.Common;
 using AttendanceApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AttendanceApi.Controllers;
 
@@ -109,6 +111,7 @@ public class AttendanceAdjustmentsController : ControllerBase
     }
 
     [HttpPost("{id:long}/approve")]
+    [Authorize(Roles = AppRoles.Approvers)]
     [ProducesResponseType(typeof(AttendanceAdjustmentResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

@@ -1,7 +1,9 @@
+using AttendanceApi.Common.Constants;
 using AttendanceApi.DTOs.Common;
 using AttendanceApi.DTOs.MonthlyTimesheet;
 using AttendanceApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AttendanceApi.Controllers;
 
@@ -21,6 +23,7 @@ public class MonthlyTimesheetsController : ControllerBase
     }
 
     [HttpPost("aggregate")]
+    [Authorize(Roles = AppRoles.AdminOrHR)]
     [ProducesResponseType(typeof(AggregateTimesheetResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Aggregate([FromBody] AggregateTimesheetRequestDto request)
@@ -30,6 +33,7 @@ public class MonthlyTimesheetsController : ControllerBase
     }
 
     [HttpGet("summary")]
+    [Authorize(Roles = AppRoles.AdminOrHR)]
     [ProducesResponseType(typeof(PagedResultDto<MonthlyTimesheetResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPaged([FromQuery] MonthlyTimesheetFilterDto filter)
     {
@@ -51,6 +55,7 @@ public class MonthlyTimesheetsController : ControllerBase
     }
 
     [HttpGet("summary/me")]
+    [Authorize]
     [ProducesResponseType(typeof(MonthlyTimesheetResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMyTimesheet(
@@ -67,6 +72,7 @@ public class MonthlyTimesheetsController : ControllerBase
     }
 
     [HttpPost("summary/lock")]
+    [Authorize(Roles = AppRoles.AdminOrHR)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
