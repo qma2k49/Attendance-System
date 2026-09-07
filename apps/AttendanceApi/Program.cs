@@ -30,6 +30,7 @@ builder.Services.AddScoped<ITimesheetAggregationService, TimesheetAggregationSer
 builder.Services.AddScoped<IMonthlyTimesheetService, MonthlyTimesheetService>();
 
 
+
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
 
