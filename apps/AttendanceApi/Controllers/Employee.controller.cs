@@ -1,11 +1,13 @@
+using AttendanceApi.Common.Constants;
 using AttendanceApi.DTOs.Common;
 using AttendanceApi.DTOs.Employees;
 using AttendanceApi.Services;
 using Microsoft.AspNetCore.Mvc;
-
+using Microsoft.AspNetCore.Authorization;
 
 namespace AttendanceApi.Controllers;
 
+[Authorize(Roles = AppRoles.AdminOrHR)]
 [ApiController]
 [Route("api/v1/employees")]
 public class EmployeesController : ControllerBase

@@ -9,6 +9,7 @@ using AttendanceApi.Services.BackgroundServices;
 using AttendanceApi.Hubs;
 using AttendanceApi.Common;
 using System.Text;
+using AttendanceApi.Common.Constants;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,6 +62,8 @@ builder.Services.AddScoped<ITimesheetAggregationService, TimesheetAggregationSer
 builder.Services.AddScoped<IMonthlyTimesheetService, MonthlyTimesheetService>();
 builder.Services.AddScoped<ITimesheetExportService, TimesheetExportService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 
 

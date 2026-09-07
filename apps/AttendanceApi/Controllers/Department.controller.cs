@@ -1,9 +1,12 @@
+using AttendanceApi.Common.Constants;
 using AttendanceApi.DTOs.Departments;
 using AttendanceApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AttendanceApi.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/v1/departments")]
 public class DepartmentsController : ControllerBase
@@ -40,6 +43,7 @@ public class DepartmentsController : ControllerBase
     [ProducesResponseType(typeof(DepartmentResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentDto dto)
     {
         try
@@ -57,6 +61,7 @@ public class DepartmentsController : ControllerBase
     [ProducesResponseType(typeof(DepartmentResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDepartmentDto dto)
     {
         var updated = await _departmentService.UpdateAsync(id, dto);
@@ -70,6 +75,7 @@ public class DepartmentsController : ControllerBase
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Authorize(Roles = AppRoles.Admin)]
     public async Task<IActionResult> Delete(int id)
     {
         var deleted = await _departmentService.DeleteAsync(id);
